@@ -156,7 +156,7 @@ body:not(.ptci-dev) .two-col{grid-template-columns:1fr!important}
 .food-pending .food-pending-status{font-size:11px;color:#896f99}
 .food-tile small{font-size:13px;line-height:1.6;min-height:38px}
 @media(max-width:640px){.food-photo-wrap{height:174px}.food-tile small{font-size:12px}}
-<link rel="stylesheet" href="ptci-result.css"></head><body><div class="wrap"><header class="nav"><div class="brand">FOODING<br/>CLUB<small>PTCI · FOOD PERSONALITY</small></div><nav class="navlinks"><button data-go="intro">홈 · 검사 소개</button><button data-go="types">16유형 도감</button><button data-go="result">나의 결과</button></nav><button class="btn soft" id="navReset" style="font-size:12px;padding:10px 15px">다시 검사하기</button></header>
+</style><link rel="stylesheet" href="ptci-result.css"></head><body><div class="wrap"><header class="nav"><div class="brand">FOODING<br/>CLUB<small>PTCI · FOOD PERSONALITY</small></div><nav class="navlinks"><button data-go="intro">홈 · 검사 소개</button><button data-go="types">16유형 도감</button><button data-go="result">나의 결과</button></nav><button class="btn soft" id="navReset" style="font-size:12px;padding:10px 15px">다시 검사하기</button></header>
 <main id="introView">
 <section class="landing-hero">
   <div class="landing-copy">
@@ -373,4 +373,4 @@ renderHomeRoster();loadDraft();const shared=new URLSearchParams(location.search)
   const method=document.getElementById('dashboardMethod');
   if(method)method.addEventListener('click',function(){const el=document.getElementById('scoringMethod');if(el){show('intro');el.scrollIntoView({behavior:'smooth',block:'start'});}});
 })();
-<script src="ptci-data.js"></script><script src="ptci-scoring.js"></script><script src="ptci-result.js"></script></body></html>
+</script><script src="ptci-data.js"></script><script src="ptci-scoring.js"></script><script src="ptci-result.js"></script></body></html>
