@@ -68,10 +68,9 @@
         keywords: [], counterKeywords: [], splitFacets: [],
       };
     });
-    const maxDistance = Math.max(...axes.map(axis => axis.distance));
-    const dominantAxes = maxDistance === 0 ? [] : axes
-      .filter(axis => round1e8(maxDistance - axis.distance) < 0.1)
-      .map(axis => axis.index);
+    const rankedAxes = [...axes].sort((a, b) => b.percent - a.percent);
+    const dominantAxes = rankedAxes[0].percent - rankedAxes[1].percent >= 10
+      ? [rankedAxes[0].index] : [];
     axes.forEach(axis => { axis.dominant = dominantAxes.includes(axis.index); });
 
     const facets = data.facets.map(definition => scoreFacet(definition, answers));
@@ -125,8 +124,6 @@
     const allHigh = axes.every(axis => axis.mean >= 4);
     return { valid: true, answers: [...answers], axes, facets, code, type, opposite, neighbor, nearNeighbor, nearAxis, dominantAxes, summary, allHigh, notice: allHigh ? data.conditions.allHigh : null };
   }
-
-  function round1e8(value) { return Math.round(value * 1e8) / 1e8; }
 
   root.PTCI_SCORING = { score, bandFor };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.PTCI_SCORING;

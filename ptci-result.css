@@ -1,3 +1,4 @@
+.test-actions #nextBtn[hidden] { display: none !important; }
 .ptci-result {
   --r-ink: #35123f;
   --r-purple: #70248f;

@@ -49,12 +49,26 @@ assert.equal(near.code, 'CLTB');
 assert.equal(near.axes[0].percent, 51);
 assert.equal(near.nearAxis.index, 0);
 assert.equal(near.nearNeighbor.code, 'FLTB');
+assert.deepEqual(near.dominantAxes, []);
 
 const sharp = score(answersFor('CLTB'));
 assert.equal(sharp.code, near.code);
 assert.notEqual(sharp.summary, near.summary);
 assert.notEqual(sharp.axes[0].description, near.axes[0].description);
 assert.equal(sharp.allHigh, true);
+assert.deepEqual(sharp.dominantAxes, []);
+
+const justBelowDominant = answersFor('CLTB');
+justBelowDominant.fill(5, 0, 7);
+assert.equal(score(justBelowDominant).axes[0].percent, 84);
+assert.deepEqual(score(justBelowDominant).dominantAxes, []);
+const atDominant = answersFor('CLTB');
+atDominant.fill(5, 0, 8);
+assert.equal(score(atDominant).axes[0].percent, 85);
+assert.deepEqual(score(atDominant).dominantAxes, [0]);
+const tiedLeaders = [...atDominant];
+tiedLeaders.fill(5, 20, 26);
+assert.deepEqual(score(tiedLeaders).dominantAxes, []);
 
 const splitAnswers = answersFor('CLTB');
 for (const [id, value] of [[1, 5], [2, 5], [3, 1], [5, 1]]) splitAnswers[id - 1] = value;
