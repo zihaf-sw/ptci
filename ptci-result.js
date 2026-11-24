@@ -39,7 +39,8 @@
   }
   function foodPanel(type) {
     return `<section class="r-panel"><h2>어울릴 만한 한 접시</h2><p class="r-sub">유형별 메뉴 예시입니다. 실제 선호나 섭취 적합성을 보장하지는 않습니다.</p><div class="r-food-grid">${type.foods.map(food => {
-      const photoStyle = `background-image:url('${food.src}');background-size:${food.sheet ? '200% 200%' : 'cover'};background-position:${food.position}`;
+      const backgroundSize = food.backgroundSize ?? (food.sheet ? '200% 200%' : 'cover');
+      const photoStyle = `background-image:url('${food.src}');background-size:${backgroundSize};background-position:${food.position}`;
       return `<div class="r-food"><div class="r-food-photo" role="img" aria-label="${escapeHtml(food.name)} 사진" style="${photoStyle}"></div><div class="r-food-name">${escapeHtml(food.name)}</div></div>`;
     }).join('')}</div></section>`;
   }
