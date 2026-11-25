@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/cards/:card.png",
+      "destination": "/api/result-card?card=:card"
+    },
+    {
+      "source": "/reports/PTCI_:code.pdf",
+      "destination": "/api/result-report?code=:code"
+    },
+    {
+      "source": "/reports/:ticket/PTCI_:code.pdf",
+      "destination": "/api/result-report?code=:code&ticket=:ticket"
+    }
+  ],
+  "functions": {
+    "api/result-card.py": {
+      "includeFiles": "{ptci-data.js,assets/[0-9]*.png,assets/character-*.png,assets/card-font/*}"
+    },
+    "api/result-report.py": {
+      "includeFiles": "{ptci-data.js,assets/card-font/*}"
+    }
+  }
+}

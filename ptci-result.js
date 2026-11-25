@@ -67,6 +67,108 @@
     const scores = loadFit(result);
     return `<section class="r-panel"><h2>이 결과가 나와 얼마나 맞나요?</h2><p class="r-sub">채점에는 사용하지 않습니다. 선택한 값은 현재 기기에만 저장됩니다.</p>${fitLabels.map((label, index) => `<div class="r-fit-row"><b>${label}</b><span>이 설명이 나와 잘 맞나요?</span><div class="r-fit-scale" role="group" aria-label="${label} 체감 일치도">${[1,2,3,4,5].map(value => `<button type="button" data-fit="${index}" data-value="${value}" aria-pressed="${scores[index] === value}">${value}</button>`).join('')}</div></div>`).join('')}<button type="button" class="r-roster-back" id="rExportCsv">응답과 체감 일치도 CSV 저장</button></section>`;
   }
+  function reportBlocks(view, type) {
+    const blocks = [];
+    function add(kind, text) {
+      const clean = text.trim().replace(/\s+/g, ' ');
+      if (clean) blocks.push([kind, clean]);
+    }
+    function read(element) {
+      // Read collapsed evidence too, and keep the visual order of the result screen.
+      if (element.matches('summary, button:not(.r-other), [role="tablist"], .r-food-photo, img')) return;
+      if (element.matches('.r-interpret-body')) {
+        add('h3', '이런 사람이야'); add('p', type.person);
+        add('h3', '메뉴 앞에서'); add('p', type.front);
+        return;
+      }
+      if (element.matches('.r-fit-row')) {
+        const selected = element.querySelector('[aria-pressed="true"]');
+        add('p', element.querySelector('b').textContent + ' · ' + (selected ? selected.textContent + '/5' : '미응답'));
+        return;
+      }
+      if (element.matches('.r-axis-row, .r-other')) {
+        const texts = [];
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) if (walker.currentNode.textContent.trim()) texts.push(walker.currentNode.textContent.trim());
+        add('p', texts.join(' · '));
+        return;
+      }
+      if (element.matches('h2,h3')) return add(element.tagName.toLowerCase(), element.textContent);
+      if (element.matches('p')) return add(element.matches('.r-sub') ? 'note' : 'p', element.textContent);
+      if (!element.children.length) return add(element.matches('b,strong') ? 'h3' : 'p', element.textContent);
+      for (const child of element.children) read(child);
+    }
+    add('note', view.querySelector('.r-eyebrow').textContent);
+    add('p', view.querySelector('.r-summary').textContent);
+    for (const notice of view.querySelectorAll('.r-notice')) add('note', notice.textContent);
+    for (const section of view.querySelectorAll('.r-panel')) read(section);
+    return blocks;
+  }
+
+  function bindReportForm(view, type) {
+    const form = view.querySelector('.r-report-form');
+    const field = form.elements.report;
+    // A native HTTPS GET also works with mobile download managers that restart a
+    // download outside the webview. Keep the report out of the URL and expire it.
+    let prepared = null;
+    async function prepare() {
+      const value = JSON.stringify(reportBlocks(view, type));
+      field.value = value;
+      prepared = null;
+      if (!window.CompressionStream || !window.crypto?.getRandomValues) return;
+      try {
+        const stream = new Blob([value]).stream().pipeThrough(new CompressionStream('gzip'));
+        const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+        if (bytes.length > 4200 || field.value !== value) return;
+        prepared = { value, encoded: btoa(String.fromCharCode(...bytes)) };
+      } catch (_) { /* The native POST uses the same document without cookies. */ }
+    }
+    prepare();
+    view.querySelectorAll('[data-fit]').forEach(button => button.addEventListener('click', prepare));
+    form.addEventListener('submit', event => {
+      field.value = JSON.stringify(reportBlocks(view, type));
+      view.querySelector('.r-report-help').hidden = false;
+      if (location.protocol === 'file:') {
+        event.preventDefault();
+        printResult(view, type);
+        return;
+      }
+      if (!navigator.cookieEnabled || !prepared || prepared.value !== field.value) return;
+      const token = Array.from(crypto.getRandomValues(new Uint8Array(8)), n => n.toString(16).padStart(2, '0')).join('');
+      const url = new URL(form.action);
+      url.pathname = url.pathname.replace('/reports/', '/reports/' + token + '/');
+      const options = `; Path=${url.pathname}; Max-Age=120; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
+      const pieces = prepared.encoded.match(/.{1,3000}/g);
+      pieces.forEach((piece, i) => { document.cookie = `ptci_${token}_${i}=${piece}${options}`; });
+      event.preventDefault();
+      location.assign(url);
+    });
+    view.querySelector('.r-retry-report')?.addEventListener('click', () => {
+      field.value = JSON.stringify(reportBlocks(view, type));
+      form.submit();
+    });
+    view.querySelector('.r-print-report').addEventListener('click', () => printResult(view, type));
+  }
+
+  function printResult(view, type) {
+    const blocks = reportBlocks(view, type);
+    const paper = document.createElement('article');
+    paper.className = 'r-print-document';
+    const title = document.createElement('h1');
+    title.textContent = type.code + ' · ' + type.name;
+    paper.append(title);
+    for (const [kind, text] of blocks) {
+      const line = document.createElement(kind === 'note' ? 'p' : kind);
+      line.textContent = text;
+      paper.append(line);
+    }
+    document.querySelector('.r-print-document')?.remove();
+    document.body.append(paper);
+    const cleanup = () => paper.remove();
+    window.addEventListener('afterprint', cleanup, { once: true });
+    window.print();
+  }
+
   function renderPTCIResult() {
     const result = state.result;
     if (!result) return;
@@ -75,7 +177,13 @@
     const preview = Boolean(result.preview);
     const intro = preview ? type.summary : result.summary;
     const resultView = document.getElementById('resultView');
-    resultView.innerHTML = `<div class="ptci-result"><section class="r-hero"><div><div class="r-eyebrow">${preview ? '16유형 안내 · 대표 예시' : '나의 유형 결과 · 65문항 응답 기준'}</div><div class="r-code-row"><span class="r-code">${type.code}</span><h1>${escapeHtml(type.name)}</h1>${type.underReview ? '<span class="r-review">이름 검토 중</span>' : ''}</div><div class="r-summary">${escapeHtml(intro)}</div></div><img src="${type.characterSrc}" alt="${escapeHtml(type.name)} 캐릭터"></section>${preview ? '<div class="r-notice">유형 설명을 미리 보는 화면입니다. 퍼센트와 나만의 설명은 65문항에 응답한 뒤 계산됩니다.</div>' : ''}${result.notice ? `<div class="r-notice">${escapeHtml(result.notice)}</div>` : ''}${preview ? '' : `<section class="r-panel"><h2>나의 미식 성향 분석</h2><p class="r-sub">글자는 방향, 퍼센트는 기준점에서 기운 정도입니다. 유형에 맞을 확률은 아닙니다. 가장 높은 축이 다음 축보다 10%포인트 이상 높을 때만 대표 축으로 표시합니다.</p>${result.axes.map(axisRow).join('')}</section>${keywordPanel(result)}${descriptionPanel(result)}`}<section class="r-panel"><h2>유형 해석</h2><div class="r-interpret"><div class="r-tabs" role="tablist" aria-label="유형 해석"><button type="button" class="r-tab" role="tab" aria-selected="true" data-tab="person">이런 사람이야</button><button type="button" class="r-tab" role="tab" aria-selected="false" data-tab="front">메뉴 앞에서</button></div><div class="r-interpret-body" role="tabpanel">${escapeHtml(type.person)}</div></div></section>${foodPanel(type)}${otherPanel(result,type)}${preview ? '' : fitPanel(result)}<div class="r-actions"><button type="button" class="r-action primary" id="rSaveCard">결과 카드 저장</button><button type="button" class="r-action" id="rShare">공유하기</button><button type="button" class="r-action" id="rAllTypes">다른 유형 보기</button></div><div class="r-footer">FOODING CLUB · PTCI RESULT</div></div>`;
+    const localFile = location.protocol === 'file:';
+    const cardId = preview ? type.code : [type.code, ...result.axes.map(axis => axis.percent)].join('-');
+    const cardUrl = `/cards/${cardId}.png`;
+    const saveControl = localFile
+      ? '<button type="button" class="r-action primary" id="rSaveCard">결과 카드 저장</button>'
+      : `<a class="r-action primary" id="rSaveCard" href="${cardUrl}" download="PTCI_${type.code}.png">결과 카드 저장</a>`;
+    resultView.innerHTML = `<div class="ptci-result"><section class="r-hero"><div><div class="r-eyebrow">${preview ? '16유형 안내 · 대표 예시' : '나의 유형 결과 · 65문항 응답 기준'}</div><div class="r-code-row"><span class="r-code">${type.code}</span><h1>${escapeHtml(type.name)}</h1>${type.underReview ? '<span class="r-review">이름 검토 중</span>' : ''}</div><div class="r-summary">${escapeHtml(intro)}</div></div><img src="${type.characterSrc}" alt="${escapeHtml(type.name)} 캐릭터"></section>${preview ? '<div class="r-notice">유형 설명을 미리 보는 화면입니다. 퍼센트와 나만의 설명은 65문항에 응답한 뒤 계산됩니다.</div>' : ''}${result.notice ? `<div class="r-notice">${escapeHtml(result.notice)}</div>` : ''}${preview ? '' : `<section class="r-panel"><h2>나의 미식 성향 분석</h2><p class="r-sub">글자는 방향, 퍼센트는 기준점에서 기운 정도입니다. 유형에 맞을 확률은 아닙니다. 가장 높은 축이 다음 축보다 10%포인트 이상 높을 때만 대표 축으로 표시합니다.</p>${result.axes.map(axisRow).join('')}</section>${keywordPanel(result)}${descriptionPanel(result)}`}<section class="r-panel"><h2>유형 해석</h2><div class="r-interpret"><div class="r-tabs" role="tablist" aria-label="유형 해석"><button type="button" class="r-tab" role="tab" aria-selected="true" data-tab="person">이런 사람이야</button><button type="button" class="r-tab" role="tab" aria-selected="false" data-tab="front">메뉴 앞에서</button></div><div class="r-interpret-body" role="tabpanel">${escapeHtml(type.person)}</div></div></section>${foodPanel(type)}${otherPanel(result,type)}${preview ? '' : fitPanel(result)}<div class="r-actions">${saveControl}<form class="r-report-form" method="post" action="/reports/PTCI_${type.code}.pdf"><input type="hidden" name="report"><button class="r-action" type="submit">전체 결과 PDF 저장</button></form><button type="button" class="r-action" id="rShare">공유하기</button><button type="button" class="r-action" id="rAllTypes">다른 유형 보기</button></div>${localFile ? '' : `<p id="rSaveHelp" hidden>다운로드가 막히면 <a href="${cardUrl}?view=1" target="_blank" rel="noopener">카드 이미지 열기</a>를 누른 뒤 이미지를 길게 눌러 저장하세요.</p>`}<p class="r-report-help" hidden>${localFile ? '' : '<button type="button" class="r-retry-report">PDF 다시 받기</button> · '}<button type="button" class="r-print-report">전체 결과 인쇄</button></p><div class="r-footer">${localFile ? '' : 'PDF 저장을 누르면 이 화면의 설명을 서버에서 파일로 변환합니다.<br>'}FOODING CLUB · PTCI RESULT</div></div>`;
     document.title = `PTCI ${type.code} ${type.name} 결과`;
     resultView.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => {
       resultView.querySelectorAll('[data-tab]').forEach(other => other.setAttribute('aria-selected', String(other === button)));
@@ -90,7 +198,11 @@
       resultView.querySelectorAll(`[data-fit="${button.dataset.fit}"]`).forEach(other => other.setAttribute('aria-pressed', String(other === button)));
     }));
     resultView.querySelector('#rExportCsv')?.addEventListener('click', () => exportResultCsv(result));
-    resultView.querySelector('#rSaveCard').addEventListener('click', () => saveResultCard(result, type));
+    resultView.querySelector('#rSaveCard').addEventListener('click', () => {
+      if (localFile) return saveResultCard(result, type);
+      resultView.querySelector('#rSaveHelp').hidden = false;
+    });
+    bindReportForm(resultView, type);
     resultView.querySelector('#rShare').addEventListener('click', () => shareResult(type));
     resultView.querySelector('#rAllTypes').addEventListener('click', () => show('types'));
   }
